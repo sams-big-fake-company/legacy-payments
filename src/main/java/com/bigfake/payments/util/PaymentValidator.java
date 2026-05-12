@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  * NOTE: This class has accumulated a lot of validation rules over the years.
  * Many of them are duplicated from bean validation annotations.
  * TODO: PAY-3900 - Consolidate validation logic, remove duplicates
- * TODO: PAY-3901 - Use javax.validation properly instead of manual checks
+ * TODO: PAY-3901 - Use jakarta.validation properly instead of manual checks
  *
  * @deprecated Most of this should be handled by Bean Validation annotations.
  * Kept for backward compatibility and some edge cases not covered by annotations.
