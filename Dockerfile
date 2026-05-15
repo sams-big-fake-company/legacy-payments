@@ -1,7 +1,7 @@
 # NOTE: This Dockerfile hasn't been updated in a while.
 # TODO: Switch to multi-stage build (PAY-3902)
 # TODO: Use non-root user (PAY-4200)
-FROM openjdk:11-jre-slim
+FROM eclipse-temurin:17-jre-jammy
 
 LABEL maintainer="payments-platform@bigfake.com"
 
