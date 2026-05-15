@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.18</version>
+        <version>3.5.3</version>
         <relativePath/>
     </parent>
 
@@ -18,10 +18,10 @@
     <description>Legacy payment processing service for BigFake Company</description>
 
     <properties>
-        <java.version>11</java.version>
-        <mapstruct.version>1.5.5.Final</mapstruct.version>
-        <springdoc.version>1.7.0</springdoc.version>
-        <lombok.version>1.18.30</lombok.version>
+        <java.version>17</java.version>
+        <mapstruct.version>1.6.3</mapstruct.version>
+        <springdoc.version>2.8.6</springdoc.version>
+        <lombok.version>1.18.38</lombok.version>
     </properties>
 
     <dependencies>
@@ -62,6 +62,11 @@
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
 
         <!-- Lombok -->
         <dependency>
@@ -81,7 +86,7 @@
         <!-- OpenAPI / Swagger -->
         <dependency>
             <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-ui</artifactId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>${springdoc.version}</version>
         </dependency>
 
