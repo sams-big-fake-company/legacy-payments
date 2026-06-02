@@ -1,0 +1,132 @@
+package com.bigfake.payments.util;
+
+import org.junit.jupiter.api.Test;
+
+import java.math.BigDecimal;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class CurrencyConverterTest {
+
+    private final CurrencyConverter converter = new CurrencyConverter();
+
+    // --- convertToUsd ---
+
+    @Test
+    void convertToUsd_usd_returnsSameAmount() {
+        BigDecimal result = converter.convertToUsd(new BigDecimal("100.00"), "USD");
+        assertEquals(new BigDecimal("100.00"), result);
+    }
+
+    @Test
+    void convertToUsd_eur_convertsCorrectly() {
+        BigDecimal result = converter.convertToUsd(new BigDecimal("100.00"), "EUR");
+        assertNotNull(result);
+        assertEquals(new BigDecimal("108.7500"), result);
+    }
+
+    @Test
+    void convertToUsd_gbp_convertsCorrectly() {
+        BigDecimal result = converter.convertToUsd(new BigDecimal("100.00"), "GBP");
+        assertNotNull(result);
+        assertEquals(new BigDecimal("126.5000"), result);
+    }
+
+    @Test
+    void convertToUsd_jpy_convertsCorrectly() {
+        BigDecimal result = converter.convertToUsd(new BigDecimal("10000"), "JPY");
+        assertNotNull(result);
+        assertEquals(new BigDecimal("71.0000"), result);
+    }
+
+    @Test
+    void convertToUsd_caseInsensitive() {
+        BigDecimal result = converter.convertToUsd(new BigDecimal("100.00"), "eur");
+        assertNotNull(result);
+        assertEquals(new BigDecimal("108.7500"), result);
+    }
+
+    @Test
+    void convertToUsd_unsupportedCurrency_returnsNull() {
+        assertNull(converter.convertToUsd(new BigDecimal("100.00"), "XYZ"));
+    }
+
+    @Test
+    void convertToUsd_nullAmount_returnsNull() {
+        assertNull(converter.convertToUsd(null, "USD"));
+    }
+
+    @Test
+    void convertToUsd_nullCurrency_returnsNull() {
+        assertNull(converter.convertToUsd(new BigDecimal("100.00"), null));
+    }
+
+    // --- convertFromUsd ---
+
+    @Test
+    void convertFromUsd_usd_returnsSameAmount() {
+        BigDecimal result = converter.convertFromUsd(new BigDecimal("100.00"), "USD");
+        assertEquals(new BigDecimal("100.00"), result);
+    }
+
+    @Test
+    void convertFromUsd_eur_convertsCorrectly() {
+        BigDecimal result = converter.convertFromUsd(new BigDecimal("108.75"), "EUR");
+        assertNotNull(result);
+        assertEquals(new BigDecimal("100.0000"), result);
+    }
+
+    @Test
+    void convertFromUsd_unsupportedCurrency_returnsNull() {
+        assertNull(converter.convertFromUsd(new BigDecimal("100.00"), "XYZ"));
+    }
+
+    @Test
+    void convertFromUsd_nullAmount_returnsNull() {
+        assertNull(converter.convertFromUsd(null, "USD"));
+    }
+
+    @Test
+    void convertFromUsd_nullCurrency_returnsNull() {
+        assertNull(converter.convertFromUsd(new BigDecimal("100.00"), null));
+    }
+
+    @Test
+    void convertFromUsd_caseInsensitive() {
+        BigDecimal result = converter.convertFromUsd(new BigDecimal("100.00"), "gbp");
+        assertNotNull(result);
+    }
+
+    // --- isSupported ---
+
+    @Test
+    void isSupported_validCurrency_returnsTrue() {
+        assertTrue(converter.isSupported("USD"));
+        assertTrue(converter.isSupported("EUR"));
+        assertTrue(converter.isSupported("GBP"));
+        assertTrue(converter.isSupported("CAD"));
+        assertTrue(converter.isSupported("AUD"));
+        assertTrue(converter.isSupported("JPY"));
+        assertTrue(converter.isSupported("CHF"));
+        assertTrue(converter.isSupported("CNY"));
+        assertTrue(converter.isSupported("INR"));
+        assertTrue(converter.isSupported("BRL"));
+    }
+
+    @Test
+    void isSupported_invalidCurrency_returnsFalse() {
+        assertFalse(converter.isSupported("XYZ"));
+        assertFalse(converter.isSupported("ABC"));
+    }
+
+    @Test
+    void isSupported_null_returnsFalse() {
+        assertFalse(converter.isSupported(null));
+    }
+
+    @Test
+    void isSupported_caseInsensitive() {
+        assertTrue(converter.isSupported("usd"));
+        assertTrue(converter.isSupported("Eur"));
+    }
+}
