@@ -9,7 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.bean.MockBean;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
@@ -17,8 +17,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -132,5 +136,76 @@ class PaymentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void getPaymentByTransactionId_returns200() throws Exception {
+        PaymentResponse response = PaymentResponse.builder()
+                .id(1L)
+                .transactionId("TXN-LOOKUP123")
+                .merchantId(1L)
+                .amount(new BigDecimal("75.00"))
+                .currency("USD")
+                .status(PaymentStatus.COMPLETED)
+                .paymentType(PaymentType.ACH)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(paymentService.getPaymentByTransactionId("TXN-LOOKUP123")).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/payments/transaction/TXN-LOOKUP123"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.transactionId").value("TXN-LOOKUP123"))
+                .andExpect(jsonPath("$.amount").value(75.00));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void getPaymentsByMerchant_returns200() throws Exception {
+        PaymentResponse p1 = PaymentResponse.builder()
+                .id(1L).transactionId("TXN-001").merchantId(5L)
+                .amount(new BigDecimal("10.00")).status(PaymentStatus.COMPLETED).build();
+        PaymentResponse p2 = PaymentResponse.builder()
+                .id(2L).transactionId("TXN-002").merchantId(5L)
+                .amount(new BigDecimal("20.00")).status(PaymentStatus.PENDING).build();
+
+        when(paymentService.getPaymentsByMerchant(5L)).thenReturn(List.of(p1, p2));
+
+        mockMvc.perform(get("/api/v1/payments/merchant/5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].transactionId").value("TXN-001"))
+                .andExpect(jsonPath("$[1].transactionId").value("TXN-002"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void updateStatus_returns200() throws Exception {
+        PaymentResponse response = PaymentResponse.builder()
+                .id(1L)
+                .transactionId("TXN-STATUS")
+                .status(PaymentStatus.COMPLETED)
+                .build();
+
+        when(paymentService.updatePaymentStatus(eq(1L), eq(PaymentStatus.COMPLETED))).thenReturn(response);
+
+        mockMvc.perform(patch("/api/v1/payments/1/status")
+                        .with(csrf())
+                        .param("status", "COMPLETED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void cancelPayment_returns204() throws Exception {
+        doNothing().when(paymentService).cancelPayment(1L);
+
+        mockMvc.perform(post("/api/v1/payments/1/cancel")
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+
+        verify(paymentService).cancelPayment(1L);
     }
 }
