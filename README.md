@@ -13,8 +13,8 @@ This service handles all payment processing for BigFake Company, including:
 
 ## Tech Stack
 
-- **Java 11** (EOL - upgrade to 17 planned for Q3 2024)
-- **Spring Boot 2.7.x** (upgrade to 3.x blocked by Java 11 requirement)
+- **Java 17**
+- **Spring Boot 4.1.x**
 - **Hibernate / Spring Data JPA**
 - **H2** (dev) / **PostgreSQL** (prod)
 - **Flyway** for database migrations
@@ -23,7 +23,6 @@ This service handles all payment processing for BigFake Company, including:
 ## Known Tech Debt
 
 - [ ] PaymentServiceImpl is too large and has complex branching logic (PAY-3201)
-- [ ] Security config uses deprecated WebSecurityConfigurerAdapter (PAY-3890)
 - [ ] No circuit breaker for external payment gateway calls (PAY-4010)
 - [ ] Currency conversion uses hardcoded rates (PAY-2876)
 - [ ] Missing integration tests for refund flow (PAY-3455)
