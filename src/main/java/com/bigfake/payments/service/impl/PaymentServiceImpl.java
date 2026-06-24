@@ -162,7 +162,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // Calculate fees
-        BigDecimal feePercentage = request.getPaymentType().getFeePercentage();
+        double feePercentage = request.getPaymentType().getFeePercentage();
         BigDecimal feeAmount = request.getAmount()
                 .multiply(BigDecimal.valueOf(feePercentage))
                 .setScale(4, RoundingMode.HALF_UP);
