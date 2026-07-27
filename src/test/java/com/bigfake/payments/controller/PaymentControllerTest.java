@@ -1,5 +1,7 @@
 package com.bigfake.payments.controller;
 
+import com.bigfake.payments.exception.InsufficientFundsException;
+import com.bigfake.payments.exception.PaymentException;
 import com.bigfake.payments.model.dto.PaymentRequest;
 import com.bigfake.payments.model.dto.PaymentResponse;
 import com.bigfake.payments.model.enums.PaymentStatus;
@@ -16,8 +18,11 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -132,5 +137,110 @@ class PaymentControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ============================
+    // Additional endpoint coverage (PAY-3810)
+    // ============================
+
+    private static PaymentResponse response(long id, String transactionId, PaymentStatus status) {
+        return PaymentResponse.builder()
+                .id(id)
+                .transactionId(transactionId)
+                .merchantId(1L)
+                .amount(new BigDecimal("10.00"))
+                .currency("USD")
+                .status(status)
+                .paymentType(PaymentType.CREDIT_CARD)
+                .createdAt(LocalDateTime.now())
+                .build();
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void getPayment_paymentException_returns400WithErrorCode() throws Exception {
+        when(paymentService.getPaymentById(404L))
+                .thenThrow(new PaymentException("Payment not found: 404", "PAYMENT_NOT_FOUND"));
+
+        mockMvc.perform(get("/api/v1/payments/404"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("PAYMENT_NOT_FOUND"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void createPayment_insufficientFunds_returns402WithAmounts() throws Exception {
+        PaymentRequest request = PaymentRequest.builder()
+                .merchantId(1L)
+                .amount(new BigDecimal("49.99"))
+                .currency("USD")
+                .paymentType(PaymentType.CREDIT_CARD)
+                .cardLastFour("4242")
+                .build();
+        when(paymentService.processPayment(any(PaymentRequest.class))).thenThrow(
+                new InsufficientFundsException("Merchant daily limit would be exceeded",
+                        new BigDecimal("49.99"), new BigDecimal("10.00")));
+
+        mockMvc.perform(post("/api/v1/payments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isPaymentRequired())
+                .andExpect(jsonPath("$.error").value("INSUFFICIENT_FUNDS"))
+                .andExpect(jsonPath("$.availableAmount").value(10.00));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void getPaymentByTransactionId_returns200() throws Exception {
+        when(paymentService.getPaymentByTransactionId("TXN-LOOKUP"))
+                .thenReturn(response(2L, "TXN-LOOKUP", PaymentStatus.PROCESSING));
+
+        mockMvc.perform(get("/api/v1/payments/transaction/TXN-LOOKUP"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(2))
+                .andExpect(jsonPath("$.status").value("PROCESSING"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void getPaymentsByMerchant_returnsList() throws Exception {
+        when(paymentService.getPaymentsByMerchant(1L)).thenReturn(List.of(
+                response(1L, "TXN-A", PaymentStatus.COMPLETED),
+                response(2L, "TXN-B", PaymentStatus.FAILED)));
+
+        mockMvc.perform(get("/api/v1/payments/merchant/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].transactionId").value("TXN-A"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void updateStatus_returns200() throws Exception {
+        when(paymentService.updatePaymentStatus(1L, PaymentStatus.REFUNDED))
+                .thenReturn(response(1L, "TXN-UPDATE", PaymentStatus.REFUNDED));
+
+        mockMvc.perform(patch("/api/v1/payments/1/status").param("status", "REFUNDED"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("REFUNDED"));
+
+        verify(paymentService).updatePaymentStatus(1L, PaymentStatus.REFUNDED);
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = {"ADMIN"})
+    void cancelPayment_returns204() throws Exception {
+        mockMvc.perform(post("/api/v1/payments/1/cancel"))
+                .andExpect(status().isNoContent());
+
+        verify(paymentService).cancelPayment(1L);
+    }
+
+    @Test
+    void cancelPayment_unauthenticated_returns401() throws Exception {
+        mockMvc.perform(post("/api/v1/payments/1/cancel"))
+                .andExpect(status().isUnauthorized());
+
+        verify(paymentService, never()).cancelPayment(any());
     }
 }
