@@ -30,6 +30,19 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+# Read replica used for reporting / read-only queries (PAY-3101).
+# Disabled unless DB_REPLICA_ENABLED=true; reporting then falls back to the primary datasource.
+payments:
+  datasource:
+    replica:
+      enabled: ${DB_REPLICA_ENABLED:false}
+      url: jdbc:postgresql://${DB_REPLICA_HOST:payments-db-replica.internal}:${DB_REPLICA_PORT:5432}/${DB_NAME:payments}
+      username: ${DB_REPLICA_USERNAME:${DB_USERNAME:payments_app}}
+      password: ${DB_REPLICA_PASSWORD:${DB_PASSWORD}}
+      driver-class-name: org.postgresql.Driver
+      maximum-pool-size: ${DB_REPLICA_MAX_POOL_SIZE:10}
+      minimum-idle: ${DB_REPLICA_MIN_IDLE:2}
+
 # Logging - less verbose in prod
 logging:
   level:
