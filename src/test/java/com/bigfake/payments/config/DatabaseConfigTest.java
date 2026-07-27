@@ -4,11 +4,13 @@ import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.support.JdbcTransactionManager;
 
 import javax.sql.DataSource;
 
@@ -22,12 +24,14 @@ class DatabaseConfigTest {
     private static final String REPLICA_URL = "jdbc:h2:mem:replica;DB_CLOSE_DELAY=-1";
 
     private final ApplicationContextRunner prodRunner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration.class))
+            .withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration.class,
+                    DataSourceTransactionManagerAutoConfiguration.class))
             .withUserConfiguration(DatabaseConfig.class)
             .withPropertyValues("spring.profiles.active=prod");
 
     private final ApplicationContextRunner devRunner = new ApplicationContextRunner()
-            .withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration.class))
+            .withConfiguration(AutoConfigurations.of(PropertyPlaceholderAutoConfiguration.class,
+                    DataSourceTransactionManagerAutoConfiguration.class))
             .withUserConfiguration(DatabaseConfig.class, PrimaryDataSourceConfig.class);
 
     @Test
@@ -56,6 +60,9 @@ class DatabaseConfigTest {
             assertThat(replica.getJdbcUrl()).isEqualTo(REPLICA_URL);
             assertThat(context.getBean(JdbcTemplate.class).getDataSource()).isSameAs(replica);
             assertThat(context.getBean("prodDataSource", DataSource.class)).isNotSameAs(replica);
+            // the replica must not make the primary datasource ambiguous for JPA / transactions
+            assertThat(context.getBean(JdbcTransactionManager.class).getDataSource())
+                    .isSameAs(context.getBean("prodDataSource", DataSource.class));
         });
     }
 

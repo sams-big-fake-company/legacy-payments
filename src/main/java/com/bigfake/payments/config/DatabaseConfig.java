@@ -2,11 +2,13 @@ package com.bigfake.payments.config;
 
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -27,6 +29,7 @@ public class DatabaseConfig {
     // TODO: This bean is probably not needed since Spring Boot auto-configures DataSource
     // but removing it broke something in 2021 and nobody has investigated since (PAY-2500)
     @Bean
+    @Primary
     @Profile("prod")
     public DataSource prodDataSource() {
         DriverManagerDataSource dataSource = new DriverManagerDataSource();
@@ -40,10 +43,10 @@ public class DatabaseConfig {
 
     /**
      * Read-only connection pool against the PostgreSQL read replica, used for
-     * reporting queries. Declared as a non-autowire-candidate so that JPA and
-     * the rest of the application keep resolving the primary datasource by type.
+     * reporting queries. Injectable with {@code @Qualifier("replicaDataSource")};
+     * JPA and everything else keep using the primary datasource.
      */
-    @Bean(name = REPLICA_DATASOURCE, destroyMethod = "close", autowireCandidate = false)
+    @Bean(name = REPLICA_DATASOURCE, destroyMethod = "close")
     @Profile("prod")
     @ConditionalOnProperty(prefix = "payments.datasource.replica", name = "enabled", havingValue = "true")
     public DataSource replicaDataSource(ReplicaDataSourceProperties properties) {
@@ -67,10 +70,8 @@ public class DatabaseConfig {
      * one is configured, otherwise falls back to the primary datasource.
      */
     @Bean
-    public JdbcTemplate reportingJdbcTemplate(DataSource primaryDataSource, BeanFactory beanFactory) {
-        DataSource reportingDataSource = beanFactory.containsBean(REPLICA_DATASOURCE)
-                ? beanFactory.getBean(REPLICA_DATASOURCE, DataSource.class)
-                : primaryDataSource;
-        return new JdbcTemplate(reportingDataSource);
+    public JdbcTemplate reportingJdbcTemplate(DataSource dataSource,
+                                              @Qualifier(REPLICA_DATASOURCE) ObjectProvider<DataSource> replica) {
+        return new JdbcTemplate(replica.getIfAvailable(() -> dataSource));
     }
 }
