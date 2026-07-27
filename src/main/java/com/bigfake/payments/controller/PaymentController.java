@@ -19,7 +19,9 @@ import java.util.List;
 /**
  * REST controller for payment operations.
  *
- * TODO: PAY-3800 - Add rate limiting
+ * Requests are rate limited per client by
+ * {@link com.bigfake.payments.ratelimit.RateLimitInterceptor}.
+ *
  * TODO: PAY-3801 - Add request/response logging interceptor
  */
 @RestController

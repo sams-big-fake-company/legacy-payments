@@ -55,3 +55,10 @@ app:
   payment:
     max-retry-attempts: 3
     gateway-timeout-ms: 5000
+  rate-limit:
+    enabled: true
+    capacity: 100
+    refill-period: 1m
+    path-patterns:
+      - /api/v1/payments/**
+    max-tracked-clients: 10000
