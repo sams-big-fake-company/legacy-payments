@@ -10,8 +10,11 @@ import javax.sql.DataSource;
 /**
  * Database configuration.
  *
- * TODO: PAY-3100 - Connection pooling should use HikariCP settings properly
- * TODO: PAY-3101 - Add read replica support for reporting queries
+ * <p>Known limitations, tracked in JIRA:
+ * <ul>
+ *   <li>PAY-3100 - Connection pooling should use HikariCP settings properly</li>
+ *   <li>PAY-3101 - Add read replica support for reporting queries</li>
+ * </ul>
  */
 @Configuration
 public class DatabaseConfig {
