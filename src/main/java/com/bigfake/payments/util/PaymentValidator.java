@@ -23,7 +23,7 @@ import java.util.regex.Pattern;
  * @deprecated Most of this should be handled by Bean Validation annotations.
  * Kept for backward compatibility and some edge cases not covered by annotations.
  */
-@Deprecated
+@Deprecated(since = "2019.4")
 @Component
 public class PaymentValidator {
 
@@ -60,48 +60,74 @@ public class PaymentValidator {
             return errors;
         }
 
+        validateMerchant(request, errors);
+        validateAmount(request, errors);
+        validateCurrency(request, errors);
+        validatePaymentType(request, errors);
+        validateEmail(request, errors);
+        validateCard(request, errors);
+        validateDescription(request, errors);
+
+        if (!errors.isEmpty()) {
+            log.warn("Payment validation failed with {} errors for merchant {}",
+                    errors.size(), request.getMerchantId());
+        }
+
+        return errors;
+    }
+
+    private void validateMerchant(PaymentRequest request, List<String> errors) {
         if (request.getMerchantId() == null) {
             errors.add("Merchant ID is required");
         }
+    }
 
+    private void validateAmount(PaymentRequest request, List<String> errors) {
         if (request.getAmount() == null) {
             errors.add("Amount is required");
-        } else {
-            if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-                errors.add("Amount must be positive");
-            }
-            if (request.getAmount().compareTo(ABSOLUTE_MAX) > 0) {
-                errors.add("Amount exceeds absolute maximum of " + ABSOLUTE_MAX);
-            }
-            // Check decimal places
-            if (request.getAmount().scale() > 2) {
-                // Some currencies support more decimals but we'll flag it
-                log.warn("Payment amount has more than 2 decimal places: {}", request.getAmount());
-            }
+            return;
         }
+        if (request.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            errors.add("Amount must be positive");
+        }
+        if (request.getAmount().compareTo(ABSOLUTE_MAX) > 0) {
+            errors.add("Amount exceeds absolute maximum of " + ABSOLUTE_MAX);
+        }
+        // Check decimal places
+        if (request.getAmount().scale() > 2) {
+            // Some currencies support more decimals but we'll flag it
+            log.warn("Payment amount has more than 2 decimal places: {}", request.getAmount());
+        }
+    }
 
+    private void validateCurrency(PaymentRequest request, List<String> errors) {
         if (request.getCurrency() == null || request.getCurrency().isEmpty()) {
             errors.add("Currency is required");
-        } else {
-            if (request.getCurrency().length() != 3) {
-                errors.add("Currency must be a 3-letter ISO code");
-            }
-            if (!SUPPORTED_CURRENCIES.contains(request.getCurrency().toUpperCase())) {
-                errors.add("Unsupported currency: " + request.getCurrency());
-            }
+            return;
         }
+        if (request.getCurrency().length() != 3) {
+            errors.add("Currency must be a 3-letter ISO code");
+        }
+        if (!SUPPORTED_CURRENCIES.contains(request.getCurrency().toUpperCase())) {
+            errors.add("Unsupported currency: " + request.getCurrency());
+        }
+    }
 
+    private void validatePaymentType(PaymentRequest request, List<String> errors) {
         if (request.getPaymentType() == null) {
             errors.add("Payment type is required");
         }
+    }
 
+    private void validateEmail(PaymentRequest request, List<String> errors) {
         // Email validation (duplicates @Email annotation but whatever)
-        if (request.getCustomerEmail() != null && !request.getCustomerEmail().isEmpty()) {
-            if (!EMAIL_PATTERN.matcher(request.getCustomerEmail()).matches()) {
-                errors.add("Invalid email format: " + request.getCustomerEmail());
-            }
+        if (request.getCustomerEmail() != null && !request.getCustomerEmail().isEmpty()
+                && !EMAIL_PATTERN.matcher(request.getCustomerEmail()).matches()) {
+            errors.add("Invalid email format: " + request.getCustomerEmail());
         }
+    }
 
+    private void validateCard(PaymentRequest request, List<String> errors) {
         // Card-specific validation
         if (request.getPaymentType() == PaymentType.CREDIT_CARD || request.getPaymentType() == PaymentType.DEBIT) {
             if (request.getCardLastFour() == null || request.getCardLastFour().isEmpty()) {
@@ -110,18 +136,13 @@ public class PaymentValidator {
                 errors.add("Card last four must be exactly 4 digits");
             }
         }
+    }
 
+    private void validateDescription(PaymentRequest request, List<String> errors) {
         // Description length check (also done by @Size but legacy code...)
         if (request.getDescription() != null && request.getDescription().length() > 500) {
             errors.add("Description must not exceed 500 characters");
         }
-
-        if (!errors.isEmpty()) {
-            log.warn("Payment validation failed with {} errors for merchant {}",
-                    errors.size(), request.getMerchantId());
-        }
-
-        return errors;
     }
 
     /**
