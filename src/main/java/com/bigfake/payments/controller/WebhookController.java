@@ -26,6 +26,8 @@ public class WebhookController {
 
     private static final Logger log = LoggerFactory.getLogger(WebhookController.class);
 
+    private static final String STATUS_KEY = "status";
+
     @Autowired
     private PaymentService paymentService;
 
@@ -43,7 +45,7 @@ public class WebhookController {
         log.info("Received gateway webhook: {}", payload);
 
         String transactionId = (String) payload.get("transaction_id");
-        String status = (String) payload.get("status");
+        String status = (String) payload.get(STATUS_KEY);
 
         if (transactionId == null || status == null) {
             log.error("Invalid webhook payload - missing required fields");
@@ -58,12 +60,12 @@ public class WebhookController {
             var payment = paymentService.getPaymentByTransactionId(transactionId);
             paymentService.updatePaymentStatus(payment.getId(), internalStatus);
 
-            return ResponseEntity.ok(Map.of("status", "accepted"));
+            return ResponseEntity.ok(Map.of(STATUS_KEY, "accepted"));
         } catch (Exception e) {
             log.error("Error processing webhook for transaction {}: {}", transactionId, e.getMessage());
             // Return 200 anyway to prevent gateway from retrying
             // TODO: PAY-4204 - Queue for manual review instead of silently failing
-            return ResponseEntity.ok(Map.of("status", "accepted", "warning", "processing_error"));
+            return ResponseEntity.ok(Map.of(STATUS_KEY, "accepted", "warning", "processing_error"));
         }
     }
 
