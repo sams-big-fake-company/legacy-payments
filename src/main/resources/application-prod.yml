@@ -14,6 +14,18 @@ spring:
       idle-timeout: 600000
       max-lifetime: 1800000
 
+    # Read replica for read-only transactions (reporting queries). Uncomment and set
+    # DB_REPLICA_HOST to route @Transactional(readOnly = true) work off the primary.
+    # replica:
+    #   url: jdbc:postgresql://${DB_REPLICA_HOST}:${DB_PORT:5432}/${DB_NAME:payments}
+    #   username: ${DB_REPLICA_USERNAME:${DB_USERNAME:payments_app}}
+    #   password: ${DB_REPLICA_PASSWORD:${DB_PASSWORD}}
+    #   driver-class-name: org.postgresql.Driver
+    #   hikari:
+    #     maximum-pool-size: 10
+    #     minimum-idle: 2
+    #     read-only: true
+
   h2:
     console:
       enabled: false

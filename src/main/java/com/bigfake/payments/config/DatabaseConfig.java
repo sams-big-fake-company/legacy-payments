@@ -1,32 +1,72 @@
 package com.bigfake.payments.config;
 
+import com.zaxxer.hikari.HikariDataSource;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.datasource.LazyConnectionDataSourceProxy;
 
 import javax.sql.DataSource;
 
 /**
  * Database configuration.
  *
- * TODO: PAY-3100 - Connection pooling should use HikariCP settings properly
- * TODO: PAY-3101 - Add read replica support for reporting queries
+ * The primary connection pool is HikariCP, configured through
+ * {@code spring.datasource.hikari.*}. When {@code spring.datasource.replica.url} is set,
+ * read-only transactions are routed to a second pool configured through
+ * {@code spring.datasource.replica.*} (and {@code spring.datasource.replica.hikari.*}).
  */
 @Configuration
 public class DatabaseConfig {
 
-    // TODO: This bean is probably not needed since Spring Boot auto-configures DataSource
-    // but removing it broke something in 2021 and nobody has investigated since (PAY-2500)
     @Bean
-    @Profile("prod")
-    public DataSource prodDataSource() {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setDriverClassName("org.postgresql.Driver");
-        // TODO: PAY-4051 - Move to environment variables or vault
-        dataSource.setUrl("jdbc:postgresql://payments-db.internal:5432/payments");
-        dataSource.setUsername("payments_app");
-        dataSource.setPassword("${DB_PASSWORD}");
-        return dataSource;
+    @Primary
+    @ConfigurationProperties("spring.datasource")
+    public DataSourceProperties primaryDataSourceProperties() {
+        return new DataSourceProperties();
+    }
+
+    @Bean
+    @ConfigurationProperties("spring.datasource.hikari")
+    public HikariDataSource primaryDataSource(
+            @Qualifier("primaryDataSourceProperties") DataSourceProperties primaryDataSourceProperties) {
+        return primaryDataSourceProperties.initializeDataSourceBuilder()
+                .type(HikariDataSource.class)
+                .build();
+    }
+
+    @Configuration
+    @ConditionalOnProperty("spring.datasource.replica.url")
+    public static class ReadReplicaConfiguration {
+
+        @Bean
+        @ConfigurationProperties("spring.datasource.replica")
+        public DataSourceProperties replicaDataSourceProperties() {
+            return new DataSourceProperties();
+        }
+
+        @Bean
+        @ConfigurationProperties("spring.datasource.replica.hikari")
+        public HikariDataSource replicaDataSource(
+                @Qualifier("replicaDataSourceProperties") DataSourceProperties replicaDataSourceProperties) {
+            return replicaDataSourceProperties.initializeDataSourceBuilder()
+                    .type(HikariDataSource.class)
+                    .build();
+        }
+
+        /**
+         * Lazy proxy so the target pool is chosen once the transaction's read-only flag is known.
+         */
+        @Bean
+        @Primary
+        public DataSource dataSource(@Qualifier("primaryDataSource") HikariDataSource primaryDataSource,
+                                    @Qualifier("replicaDataSource") HikariDataSource replicaDataSource) {
+            return new LazyConnectionDataSourceProxy(
+                    new ReadWriteRoutingDataSource(primaryDataSource, replicaDataSource));
+        }
     }
 }
