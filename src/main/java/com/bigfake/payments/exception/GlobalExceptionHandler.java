@@ -24,13 +24,17 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    private static final String KEY_TIMESTAMP = "timestamp";
+    private static final String KEY_ERROR = "error";
+    private static final String KEY_MESSAGE = "message";
+
     @ExceptionHandler(PaymentException.class)
     public ResponseEntity<Map<String, Object>> handlePaymentException(PaymentException ex) {
         log.error("Payment error: {}", ex.getMessage(), ex);
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
-        body.put("error", ex.getErrorCode());
-        body.put("message", ex.getMessage());
+        body.put(KEY_TIMESTAMP, LocalDateTime.now().toString());
+        body.put(KEY_ERROR, ex.getErrorCode());
+        body.put(KEY_MESSAGE, ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
@@ -38,9 +42,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleInsufficientFunds(InsufficientFundsException ex) {
         log.warn("Insufficient funds: requested={}, available={}", ex.getRequestedAmount(), ex.getAvailableAmount());
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
-        body.put("error", ex.getErrorCode());
-        body.put("message", ex.getMessage());
+        body.put(KEY_TIMESTAMP, LocalDateTime.now().toString());
+        body.put(KEY_ERROR, ex.getErrorCode());
+        body.put(KEY_MESSAGE, ex.getMessage());
         body.put("requestedAmount", ex.getRequestedAmount());
         body.put("availableAmount", ex.getAvailableAmount());
         return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED).body(body);
@@ -49,8 +53,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
-        body.put("error", "VALIDATION_ERROR");
+        body.put(KEY_TIMESTAMP, LocalDateTime.now().toString());
+        body.put(KEY_ERROR, "VALIDATION_ERROR");
 
         Map<String, String> fieldErrors = new HashMap<>();
         for (FieldError error : ex.getBindingResult().getFieldErrors()) {
@@ -65,9 +69,9 @@ public class GlobalExceptionHandler {
         // TODO: PAY-3702 - Don't expose internal error details in production
         log.error("Unexpected error", ex);
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
-        body.put("error", "INTERNAL_ERROR");
-        body.put("message", "An unexpected error occurred: " + ex.getMessage());
+        body.put(KEY_TIMESTAMP, LocalDateTime.now().toString());
+        body.put(KEY_ERROR, "INTERNAL_ERROR");
+        body.put(KEY_MESSAGE, "An unexpected error occurred: " + ex.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
 }
