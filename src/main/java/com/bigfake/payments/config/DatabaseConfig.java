@@ -7,8 +7,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
-import javax.sql.DataSource;
-
 /**
  * Database configuration.
  *
@@ -22,7 +20,7 @@ public class DatabaseConfig {
     @Bean
     @Profile("prod")
     @ConfigurationProperties("spring.datasource.hikari")
-    public DataSource prodDataSource(DataSourceProperties properties) {
+    public HikariDataSource prodDataSource(DataSourceProperties properties) {
         return properties.initializeDataSourceBuilder()
                 .type(HikariDataSource.class)
                 .build();
