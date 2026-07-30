@@ -22,7 +22,7 @@ public enum PaymentStatus {
      * Check if payment is in a terminal state.
      * @deprecated Use PaymentStatusHelper instead (PAY-3302)
      */
-    @Deprecated
+    @Deprecated(since = "1.4.2")
     public boolean isTerminal() {
         return this == COMPLETED || this == FAILED || this == REFUNDED;
     }

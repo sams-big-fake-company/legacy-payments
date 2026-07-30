@@ -21,7 +21,7 @@ import java.util.Map;
  *
  * @deprecated This entire class should be replaced with a proper FX service
  */
-@Deprecated
+@Deprecated(since = "1.4.2", forRemoval = true)
 @Component
 public class CurrencyConverter {
 
