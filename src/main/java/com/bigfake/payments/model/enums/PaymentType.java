@@ -15,7 +15,7 @@ public enum PaymentType {
      * Returns the processing fee percentage for this payment type.
      * @deprecated Fee calculation should be in FeeService (PAY-2800)
      */
-    @Deprecated
+    @Deprecated(since = "1.4.2")
     public double getFeePercentage() {
         switch (this) {
             case CREDIT_CARD:
