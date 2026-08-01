@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
@@ -94,7 +95,7 @@ public class RefundServiceImpl implements RefundService {
             // Simulating gateway call
             Thread.sleep(50);
             refund.setStatus(PaymentStatus.COMPLETED);
-            refund.setProcessedAt(LocalDateTime.now());
+            refund.setProcessedAt(LocalDateTime.now(ZoneOffset.UTC));
 
             // Update original payment status
             payment.setStatus(PaymentStatus.REFUNDED);
