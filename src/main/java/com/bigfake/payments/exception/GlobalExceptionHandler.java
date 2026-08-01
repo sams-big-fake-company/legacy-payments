@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -28,7 +29,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handlePaymentException(PaymentException ex) {
         log.error("Payment error: {}", ex.getMessage(), ex);
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("timestamp", LocalDateTime.now(ZoneOffset.UTC).toString());
         body.put("error", ex.getErrorCode());
         body.put("message", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
@@ -38,7 +39,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleInsufficientFunds(InsufficientFundsException ex) {
         log.warn("Insufficient funds: requested={}, available={}", ex.getRequestedAmount(), ex.getAvailableAmount());
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("timestamp", LocalDateTime.now(ZoneOffset.UTC).toString());
         body.put("error", ex.getErrorCode());
         body.put("message", ex.getMessage());
         body.put("requestedAmount", ex.getRequestedAmount());
@@ -49,7 +50,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("timestamp", LocalDateTime.now(ZoneOffset.UTC).toString());
         body.put("error", "VALIDATION_ERROR");
 
         Map<String, String> fieldErrors = new HashMap<>();
@@ -65,7 +66,7 @@ public class GlobalExceptionHandler {
         // TODO: PAY-3702 - Don't expose internal error details in production
         log.error("Unexpected error", ex);
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("timestamp", LocalDateTime.now(ZoneOffset.UTC).toString());
         body.put("error", "INTERNAL_ERROR");
         body.put("message", "An unexpected error occurred: " + ex.getMessage());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
