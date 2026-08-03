@@ -1,5 +1,6 @@
 package com.bigfake.payments.service;
 
+import com.bigfake.payments.exception.InsufficientFundsException;
 import com.bigfake.payments.exception.PaymentException;
 import com.bigfake.payments.model.dto.PaymentRequest;
 import com.bigfake.payments.model.dto.PaymentResponse;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -215,5 +217,409 @@ class PaymentServiceImplTest {
         PaymentException exception = assertThrows(PaymentException.class,
                 () -> paymentService.cancelPayment(1L));
         assertEquals("CANNOT_CANCEL", exception.getErrorCode());
+    }
+
+    // ============================
+    // Helpers for the cases below
+    // ============================
+
+    private void stubSaveEchoingArgument() {
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> {
+            Payment p = invocation.getArgument(0);
+            if (p.getId() == null) {
+                p.setId(1L);
+            }
+            return p;
+        });
+    }
+
+    private void stubMerchantFoundWithNoHistory() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        when(paymentRepository.sumCompletedAmountByMerchantSince(anyLong(), any())).thenReturn(BigDecimal.ZERO);
+    }
+
+    private static Payment storedPayment(Long id, String transactionId, PaymentStatus status) {
+        return Payment.builder()
+                .id(id)
+                .transactionId(transactionId)
+                .merchantId(1L)
+                .amount(new BigDecimal("99.99"))
+                .currency("USD")
+                .status(status)
+                .paymentType(PaymentType.CREDIT_CARD)
+                .build();
+    }
+
+    // ============================
+    // Amount, currency and fees
+    // ============================
+
+    @Test
+    void processPayment_acceptsTheMinimumAndMaximumAllowedAmounts() {
+        stubMerchantFoundWithNoHistory();
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.emptyList());
+        stubSaveEchoingArgument();
+
+        validRequest.setAmount(new BigDecimal("0.50"));
+        assertNotNull(paymentService.processPayment(validRequest));
+
+        validRequest.setAmount(new BigDecimal("50000.00"));
+        assertNotNull(paymentService.processPayment(validRequest));
+    }
+
+    @Test
+    void processPayment_calculatesFeeAndNetAmountFromThePaymentTypeRate() {
+        stubMerchantFoundWithNoHistory();
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.emptyList());
+        stubSaveEchoingArgument();
+        validRequest.setAmount(new BigDecimal("100.00"));
+
+        PaymentResponse response = paymentService.processPayment(validRequest);
+
+        // CREDIT_CARD -> 2.9%
+        assertEquals(new BigDecimal("2.9000"), response.getFeeAmount());
+        assertEquals(new BigDecimal("97.1000"), response.getNetAmount());
+    }
+
+    @Test
+    void processPayment_convertsNonUsdAmountsBeforeCheckingLimits() {
+        stubMerchantFoundWithNoHistory();
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.emptyList());
+        when(currencyConverter.convertToUsd(new BigDecimal("99.99"), "EUR"))
+                .thenReturn(new BigDecimal("108.74"));
+        stubSaveEchoingArgument();
+        validRequest.setCurrency("EUR");
+
+        PaymentResponse response = paymentService.processPayment(validRequest);
+
+        assertEquals("EUR", response.getCurrency());
+        // The stored amount stays in the original currency; only limit checks use USD.
+        assertEquals(new BigDecimal("99.99"), response.getAmount());
+        verify(currencyConverter).convertToUsd(new BigDecimal("99.99"), "EUR");
+    }
+
+    @Test
+    void processPayment_rejectsCurrenciesTheConverterCannotHandle() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        when(currencyConverter.convertToUsd(any(), eq("XYZ"))).thenReturn(null);
+        validRequest.setCurrency("XYZ");
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.processPayment(validRequest));
+
+        assertEquals("UNSUPPORTED_CURRENCY", exception.getErrorCode());
+        verify(paymentRepository, never()).save(any(Payment.class));
+    }
+
+    // ============================
+    // Payment type specific rules
+    // ============================
+
+    @Test
+    void processPayment_rejectsWireTransfersBelowTheWireMinimum() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        validRequest.setPaymentType(PaymentType.WIRE);
+        validRequest.setAmount(new BigDecimal("99.99"));
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.processPayment(validRequest));
+
+        assertEquals("WIRE_MINIMUM_NOT_MET", exception.getErrorCode());
+    }
+
+    @Test
+    void processPayment_rejectsWireTransfersWithoutACustomerName() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        validRequest.setPaymentType(PaymentType.WIRE);
+        validRequest.setAmount(new BigDecimal("500.00"));
+        validRequest.setCustomerName("   ");
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.processPayment(validRequest));
+
+        assertEquals("WIRE_NAME_REQUIRED", exception.getErrorCode());
+    }
+
+    @Test
+    void processPayment_acceptsWireTransfersAtTheMinimumWithACustomerName() {
+        stubMerchantFoundWithNoHistory();
+        stubSaveEchoingArgument();
+        validRequest.setPaymentType(PaymentType.WIRE);
+        validRequest.setAmount(new BigDecimal("100.00"));
+        validRequest.setCustomerName("Ada Lovelace");
+
+        PaymentResponse response = paymentService.processPayment(validRequest);
+
+        // WIRE -> 0.1%
+        assertEquals(new BigDecimal("0.1000"), response.getFeeAmount());
+    }
+
+    @Test
+    void processPayment_rejectsAchPaymentsThatBreachTheAchDailyLimit() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        when(paymentRepository.sumCompletedAmountByMerchantSince(anyLong(), any()))
+                .thenReturn(new BigDecimal("24950.00"));
+        validRequest.setPaymentType(PaymentType.ACH);
+        validRequest.setAmount(new BigDecimal("100.00"));
+
+        InsufficientFundsException exception = assertThrows(InsufficientFundsException.class,
+                () -> paymentService.processPayment(validRequest));
+
+        assertEquals("INSUFFICIENT_FUNDS", exception.getErrorCode());
+        assertEquals(new BigDecimal("100.00"), exception.getRequestedAmount());
+        assertEquals(new BigDecimal("50.00"), exception.getAvailableAmount());
+    }
+
+    @Test
+    void processPayment_acceptsAchPaymentsWithinTheAchDailyLimit() {
+        stubMerchantFoundWithNoHistory();
+        stubSaveEchoingArgument();
+        validRequest.setPaymentType(PaymentType.ACH);
+        validRequest.setAmount(new BigDecimal("100.00"));
+
+        // ACH -> 0.8%
+        assertEquals(new BigDecimal("0.8000"), paymentService.processPayment(validRequest).getFeeAmount());
+    }
+
+    @Test
+    void processPayment_treatsAMissingTotalAsZeroSpentToday() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        when(paymentRepository.sumCompletedAmountByMerchantSince(anyLong(), any())).thenReturn(null);
+        stubSaveEchoingArgument();
+        validRequest.setPaymentType(PaymentType.ACH);
+
+        assertNotNull(paymentService.processPayment(validRequest));
+    }
+
+    @Test
+    void processPayment_requiresCardLastFourForCreditCardPayments() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        validRequest.setCardLastFour(null);
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.processPayment(validRequest));
+
+        assertEquals("CARD_INFO_REQUIRED", exception.getErrorCode());
+    }
+
+    @Test
+    void processPayment_requiresCardLastFourForDebitPayments() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        validRequest.setPaymentType(PaymentType.DEBIT);
+        validRequest.setCardLastFour("42");
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.processPayment(validRequest));
+
+        assertEquals("CARD_INFO_REQUIRED", exception.getErrorCode());
+    }
+
+    @Test
+    void processPayment_acceptsDebitPaymentsWithCardDetails() {
+        stubMerchantFoundWithNoHistory();
+        stubSaveEchoingArgument();
+        validRequest.setPaymentType(PaymentType.DEBIT);
+        validRequest.setAmount(new BigDecimal("100.00"));
+
+        // DEBIT -> 1.5%
+        assertEquals(new BigDecimal("1.5000"), paymentService.processPayment(validRequest).getFeeAmount());
+    }
+
+    @Test
+    void processPayment_rejectsCreditCardPaymentsThatBreachTheVelocityLimit() {
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.nCopies(10, storedPayment(2L, "TXN-RECENT", PaymentStatus.COMPLETED)));
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.processPayment(validRequest));
+
+        assertEquals("VELOCITY_EXCEEDED", exception.getErrorCode());
+    }
+
+    // ============================
+    // Merchant limits and notifications
+    // ============================
+
+    @Test
+    void processPayment_rejectsPaymentsThatBreachTheMerchantDailyLimit() {
+        testMerchant.setDailyLimit(new BigDecimal("120.00"));
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.emptyList());
+        when(paymentRepository.sumCompletedAmountByMerchantSince(anyLong(), any()))
+                .thenReturn(new BigDecimal("50.00"));
+
+        InsufficientFundsException exception = assertThrows(InsufficientFundsException.class,
+                () -> paymentService.processPayment(validRequest));
+
+        assertEquals(new BigDecimal("70.00"), exception.getAvailableAmount());
+        verify(paymentRepository, never()).save(any(Payment.class));
+    }
+
+    @Test
+    void processPayment_skipsTheDailyLimitCheckWhenTheMerchantHasNoLimit() {
+        testMerchant.setDailyLimit(null);
+        when(merchantRepository.findById(1L)).thenReturn(Optional.of(testMerchant));
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.emptyList());
+        stubSaveEchoingArgument();
+
+        assertNotNull(paymentService.processPayment(validRequest));
+        verify(paymentRepository, never()).sumCompletedAmountByMerchantSince(anyLong(), any());
+    }
+
+    @Test
+    void processPayment_ignoresAnEmptyIdempotencyKey() {
+        validRequest.setIdempotencyKey("");
+        stubMerchantFoundWithNoHistory();
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.emptyList());
+        stubSaveEchoingArgument();
+
+        assertNotNull(paymentService.processPayment(validRequest));
+        verify(paymentRepository, never()).findByIdempotencyKey(any());
+    }
+
+    @Test
+    void processPayment_succeedsEvenWhenTheNotificationServiceFails() {
+        stubMerchantFoundWithNoHistory();
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.emptyList());
+        stubSaveEchoingArgument();
+        doThrow(new RuntimeException("notification bus down"))
+                .when(notificationService).sendPaymentNotification(any(Payment.class));
+
+        assertNotNull(paymentService.processPayment(validRequest).getTransactionId());
+        verify(notificationService).sendPaymentNotification(any(Payment.class));
+    }
+
+    @Test
+    void processPayment_marksThePaymentFailedWhenPersistenceThrowsDuringGatewayProcessing() {
+        stubMerchantFoundWithNoHistory();
+        when(paymentRepository.findByMerchantIdAndDateRange(anyLong(), any(), any()))
+                .thenReturn(java.util.Collections.emptyList());
+        when(paymentRepository.save(any(Payment.class)))
+                .thenAnswer(invocation -> {
+                    Payment p = invocation.getArgument(0);
+                    p.setId(1L);
+                    return p;
+                })
+                .thenThrow(new RuntimeException("db unavailable"))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        PaymentResponse response = paymentService.processPayment(validRequest);
+
+        assertEquals(PaymentStatus.FAILED, response.getStatus());
+        assertEquals("Processing error: db unavailable", response.getFailureReason());
+    }
+
+    // ============================
+    // Reads and status transitions
+    // ============================
+
+    @Test
+    void getPaymentById_returnsTheMappedPayment() {
+        when(paymentRepository.findById(1L)).thenReturn(Optional.of(storedPayment(1L, "TXN-READ1", PaymentStatus.COMPLETED)));
+
+        PaymentResponse response = paymentService.getPaymentById(1L);
+
+        assertEquals("TXN-READ1", response.getTransactionId());
+        assertEquals(PaymentStatus.COMPLETED, response.getStatus());
+    }
+
+    @Test
+    void getPaymentByTransactionId_returnsTheMappedPayment() {
+        when(paymentRepository.findByTransactionId("TXN-READ2"))
+                .thenReturn(Optional.of(storedPayment(2L, "TXN-READ2", PaymentStatus.PENDING)));
+
+        assertEquals(2L, paymentService.getPaymentByTransactionId("TXN-READ2").getId());
+    }
+
+    @Test
+    void getPaymentByTransactionId_throwsWhenMissing() {
+        when(paymentRepository.findByTransactionId("TXN-MISSING")).thenReturn(Optional.empty());
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.getPaymentByTransactionId("TXN-MISSING"));
+
+        assertEquals("PAYMENT_NOT_FOUND", exception.getErrorCode());
+    }
+
+    @Test
+    void getPaymentsByMerchant_mapsEveryPayment() {
+        when(paymentRepository.findByMerchantIdAndStatus(1L, null)).thenReturn(java.util.List.of(
+                storedPayment(1L, "TXN-A", PaymentStatus.COMPLETED),
+                storedPayment(2L, "TXN-B", PaymentStatus.FAILED)));
+
+        java.util.List<PaymentResponse> responses = paymentService.getPaymentsByMerchant(1L);
+
+        assertEquals(2, responses.size());
+        assertEquals("TXN-A", responses.get(0).getTransactionId());
+        assertEquals("TXN-B", responses.get(1).getTransactionId());
+    }
+
+    @Test
+    void getPaymentsByMerchant_returnsAnEmptyListWhenThereAreNoPayments() {
+        when(paymentRepository.findByMerchantIdAndStatus(1L, null)).thenReturn(java.util.Collections.emptyList());
+
+        assertTrue(paymentService.getPaymentsByMerchant(1L).isEmpty());
+    }
+
+    @Test
+    void updatePaymentStatus_setsCompletedAtWhenCompleting() {
+        Payment pending = storedPayment(1L, "TXN-UPD1", PaymentStatus.PENDING);
+        when(paymentRepository.findById(1L)).thenReturn(Optional.of(pending));
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        PaymentResponse response = paymentService.updatePaymentStatus(1L, PaymentStatus.COMPLETED);
+
+        assertEquals(PaymentStatus.COMPLETED, response.getStatus());
+        assertNotNull(response.getCompletedAt());
+    }
+
+    @Test
+    void updatePaymentStatus_allowsRefundingATerminalPayment() {
+        Payment completed = storedPayment(1L, "TXN-UPD2", PaymentStatus.COMPLETED);
+        when(paymentRepository.findById(1L)).thenReturn(Optional.of(completed));
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertEquals(PaymentStatus.REFUNDED,
+                paymentService.updatePaymentStatus(1L, PaymentStatus.REFUNDED).getStatus());
+    }
+
+    @Test
+    void updatePaymentStatus_rejectsOtherTransitionsOutOfATerminalState() {
+        Payment failed = storedPayment(1L, "TXN-UPD3", PaymentStatus.FAILED);
+        when(paymentRepository.findById(1L)).thenReturn(Optional.of(failed));
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.updatePaymentStatus(1L, PaymentStatus.COMPLETED));
+
+        assertEquals("INVALID_STATE_TRANSITION", exception.getErrorCode());
+        verify(paymentRepository, never()).save(any(Payment.class));
+    }
+
+    @Test
+    void updatePaymentStatus_throwsWhenThePaymentIsMissing() {
+        when(paymentRepository.findById(404L)).thenReturn(Optional.empty());
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.updatePaymentStatus(404L, PaymentStatus.COMPLETED));
+
+        assertEquals("PAYMENT_NOT_FOUND", exception.getErrorCode());
+    }
+
+    @Test
+    void cancelPayment_throwsWhenThePaymentIsMissing() {
+        when(paymentRepository.findById(404L)).thenReturn(Optional.empty());
+
+        PaymentException exception = assertThrows(PaymentException.class,
+                () -> paymentService.cancelPayment(404L));
+
+        assertEquals("PAYMENT_NOT_FOUND", exception.getErrorCode());
     }
 }
