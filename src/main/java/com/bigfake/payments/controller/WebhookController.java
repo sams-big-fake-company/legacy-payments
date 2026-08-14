@@ -42,6 +42,11 @@ public class WebhookController {
 
         log.info("Received gateway webhook: {}", payload);
 
+        Object eventId = payload.get("event_id");
+        if (eventId != null) {
+            log.info("Gateway webhook event id: {}", eventId);
+        }
+
         String transactionId = (String) payload.get("transaction_id");
         String status = (String) payload.get("status");
 
