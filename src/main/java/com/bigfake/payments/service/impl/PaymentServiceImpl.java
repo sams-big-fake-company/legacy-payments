@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -324,7 +325,7 @@ public class PaymentServiceImpl implements PaymentService {
     private boolean isVelocityExceeded(Long merchantId) {
         // Simple velocity check: no more than 10 transactions in the last minute
         // TODO: PAY-3212 - This is a naive implementation, use Redis-based rate limiting
-        LocalDateTime oneMinuteAgo = LocalDateTime.now().minusMinutes(1);
+        LocalDateTime oneMinuteAgo = LocalDateTime.now(ZoneOffset.UTC).minusMinutes(1);
         List<Payment> recentPayments = paymentRepository.findByMerchantIdAndDateRange(
                 merchantId, oneMinuteAgo, LocalDateTime.now());
         return recentPayments.size() >= 10;
