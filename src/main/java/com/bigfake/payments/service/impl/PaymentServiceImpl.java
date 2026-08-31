@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -201,7 +202,7 @@ public class PaymentServiceImpl implements PaymentService {
 
             if (gatewaySuccess) {
                 payment.setStatus(PaymentStatus.COMPLETED);
-                payment.setCompletedAt(LocalDateTime.now());
+                payment.setCompletedAt(LocalDateTime.now(ZoneOffset.UTC));
                 payment.setGatewayReference("GW-" + UUID.randomUUID().toString().substring(0, 8));
                 log.info("Payment completed: {}", payment.getTransactionId());
             } else {
