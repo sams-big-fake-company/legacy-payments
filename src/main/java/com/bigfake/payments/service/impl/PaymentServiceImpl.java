@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -316,7 +317,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private BigDecimal getTodaysTotalForMerchant(Long merchantId) {
-        LocalDateTime startOfDay = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0);
+        LocalDateTime startOfDay = LocalDateTime.now(ZoneOffset.UTC).withHour(0).withMinute(0).withSecond(0);
         BigDecimal total = paymentRepository.sumCompletedAmountByMerchantSince(merchantId, startOfDay);
         return total != null ? total : BigDecimal.ZERO;
     }
