@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -269,7 +270,7 @@ public class PaymentServiceImpl implements PaymentService {
 
         payment.setStatus(status);
         if (status == PaymentStatus.COMPLETED) {
-            payment.setCompletedAt(LocalDateTime.now());
+            payment.setCompletedAt(LocalDateTime.now(ZoneOffset.UTC));
         }
 
         payment = paymentRepository.save(payment);
