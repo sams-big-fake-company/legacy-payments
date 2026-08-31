@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -38,7 +39,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, Object>> handleInsufficientFunds(InsufficientFundsException ex) {
         log.warn("Insufficient funds: requested={}, available={}", ex.getRequestedAmount(), ex.getAvailableAmount());
         Map<String, Object> body = new HashMap<>();
-        body.put("timestamp", LocalDateTime.now().toString());
+        body.put("timestamp", LocalDateTime.now(ZoneOffset.UTC).toString());
         body.put("error", ex.getErrorCode());
         body.put("message", ex.getMessage());
         body.put("requestedAmount", ex.getRequestedAmount());
