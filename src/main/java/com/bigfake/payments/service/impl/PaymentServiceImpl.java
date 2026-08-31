@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -326,7 +327,7 @@ public class PaymentServiceImpl implements PaymentService {
         // TODO: PAY-3212 - This is a naive implementation, use Redis-based rate limiting
         LocalDateTime oneMinuteAgo = LocalDateTime.now().minusMinutes(1);
         List<Payment> recentPayments = paymentRepository.findByMerchantIdAndDateRange(
-                merchantId, oneMinuteAgo, LocalDateTime.now());
+                merchantId, oneMinuteAgo, LocalDateTime.now(ZoneOffset.UTC));
         return recentPayments.size() >= 10;
     }
 
