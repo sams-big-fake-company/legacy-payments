@@ -11,7 +11,6 @@ import com.bigfake.payments.service.NotificationService;
 import com.bigfake.payments.service.RefundService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,22 +31,27 @@ public class RefundServiceImpl implements RefundService {
 
     private static final Logger log = LoggerFactory.getLogger(RefundServiceImpl.class);
 
-    @Autowired
-    private RefundRepository refundRepository;
+    private final RefundRepository refundRepository;
 
-    @Autowired
-    private PaymentRepository paymentRepository;
+    private final PaymentRepository paymentRepository;
 
-    @Autowired
-    private NotificationService notificationService;
+    private final NotificationService notificationService;
+
+    public RefundServiceImpl(RefundRepository refundRepository,
+                             PaymentRepository paymentRepository,
+                             NotificationService notificationService) {
+        this.refundRepository = refundRepository;
+        this.paymentRepository = paymentRepository;
+        this.notificationService = notificationService;
+    }
 
     @Override
     public Refund processRefund(RefundRequest request) {
-        log.info("Processing refund for payment: {}, amount: {}", request.getPaymentId(), request.getAmount());
-
         // Find the original payment
         Payment payment = paymentRepository.findById(request.getPaymentId())
                 .orElseThrow(() -> new PaymentException("Payment not found: " + request.getPaymentId(), "PAYMENT_NOT_FOUND"));
+
+        log.info("Processing refund for payment: {}", payment.getTransactionId());
 
         // Validate payment is in refundable state
         if (payment.getStatus() != PaymentStatus.COMPLETED) {
