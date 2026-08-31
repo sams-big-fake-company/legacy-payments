@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import javax.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 /**
  * Merchant entity - represents a business using our payment platform.
@@ -58,7 +59,7 @@ public class Merchant {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = LocalDateTime.now();
+        createdAt = LocalDateTime.now(ZoneOffset.UTC);
         updatedAt = LocalDateTime.now();
         if (isActive == null) {
             isActive = true;
