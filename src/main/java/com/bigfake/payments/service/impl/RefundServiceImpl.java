@@ -101,6 +101,10 @@ public class RefundServiceImpl implements RefundService {
             paymentRepository.save(payment);
 
             log.info("Refund completed: {} for payment: {}", refund.getRefundId(), payment.getTransactionId());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Refund processing failed: {}", e.getMessage(), e);
+            refund.setStatus(PaymentStatus.FAILED);
         } catch (Exception e) {
             log.error("Refund processing failed: {}", e.getMessage(), e);
             refund.setStatus(PaymentStatus.FAILED);
